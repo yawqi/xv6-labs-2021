@@ -1,0 +1,1 @@
+hello worldecho 3 > time.txt! 
