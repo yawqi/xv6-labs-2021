@@ -132,11 +132,11 @@ void syscall(void) {
       release(&tickslock);
 
       if (curr_tick - p->prev_tick >= p->ticks) {
+        printf("Running alarm\n");
         p->prev_tick = curr_tick;
         p->alarm_fn();
       }
     }
-
   } else {
     printf("%d %s: unknown sys call %d\n", p->pid, p->name, num);
     p->trapframe->a0 = -1;
