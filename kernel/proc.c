@@ -1,9 +1,15 @@
 #include "types.h"
+
 #include "param.h"
+
 #include "memlayout.h"
+
 #include "riscv.h"
+
 #include "spinlock.h"
+
 #include "proc.h"
+
 #include "defs.h"
 
 struct cpu cpus[NCPU];
@@ -109,10 +115,6 @@ static struct proc *allocproc(void) {
 found:
   p->pid = allocpid();
   p->state = USED;
-  p->ticks = 0;
-  p->prev_tick = 0;
-  p->alarm_fn = 0;
-
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
     freeproc(p);
@@ -158,6 +160,9 @@ static void freeproc(struct proc *p) {
   p->ticks = 0;
   p->prev_tick = 0;
   p->alarm_fn = 0;
+  p->alarm_pc = 0;
+  p->intr_trapframe = 0;
+  p->inside_handler = 0;
 }
 
 // Create a user page table for a given process,

@@ -86,7 +86,7 @@ uint64 sys_uptime(void) {
 
 uint64 sys_sigalarm(void) {
   int tick;
-  uint64 va, pa;
+  uint64 va;
 
   if (argint(0, &tick) < 0)
     return -1;
@@ -100,11 +100,9 @@ uint64 sys_sigalarm(void) {
     return -1;
   }
 
-  pa = walkaddr(myproc()->pagetable, va);
-  if (!pa)
-    return -1;
-
+  myproc()->alarm_fn = va;
   myproc()->ticks = tick;
+
   acquire(&tickslock);
   myproc()->prev_tick = ticks;
   release(&tickslock);
@@ -112,7 +110,8 @@ uint64 sys_sigalarm(void) {
 }
 
 uint64 sys_sigreturn(void) {
-  asm("" ::);
-
+  struct proc *p = myproc();
+  memmove(p->trapframe, p->intr_trapframe, sizeof(struct trapframe));
+  p->inside_handler = 0;
   return 0;
 }

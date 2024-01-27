@@ -1,9 +1,15 @@
 #include "types.h"
+
 #include "param.h"
+
 #include "memlayout.h"
+
 #include "riscv.h"
+
 #include "spinlock.h"
+
 #include "proc.h"
+
 #include "defs.h"
 
 struct spinlock tickslock;
@@ -68,17 +74,27 @@ void usertrap(void) {
 
   // give up the CPU if this is a timer interrupt.
   if (which_dev == 2) {
-    if (p->ticks != 0) {
+    if (p->ticks != 0 && p->inside_handler == 0) {
       acquire(&tickslock);
       uint curr_tick = ticks;
       release(&tickslock);
+      vmprint(myproc()->pagetable, 2);
       if (curr_tick - p->prev_tick >= p->ticks) {
+        p->inside_handler = 1;
         printf("Running alarm\n");
         p->prev_tick = curr_tick;
-        p->alarm_fn();
+        p->intr_trapframe = p->trapframe + 1;
+        memmove(p->intr_trapframe, p->trapframe, sizeof(struct trapframe));
+        p->trapframe->epc = p->alarm_fn;
+        // TODO record the original user pc in proc
+        // set pc to alarm_fn vm in user space
+        // and call sret
+        // In the sigreturn syscall, we will return to those
+        // saved original pc
       }
+    } else {
+      yield();
     }
-    yield();
   }
 
   usertrapret();

@@ -108,5 +108,8 @@ struct proc {
 
   int ticks;
   int prev_tick;
-  void (*alarm_fn)(void);
+  int inside_handler;
+  uint64 alarm_fn;
+  uint64 alarm_pc;
+  struct trapframe *intr_trapframe;
 };
