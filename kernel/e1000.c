@@ -23,6 +23,7 @@ static struct mbuf *tx_mbufs[TX_RING_SIZE];
 #define RX_RING_SIZE 16
 static struct rx_desc rx_ring[RX_RING_SIZE] __attribute__((aligned(16)));
 static struct mbuf *rx_mbufs[RX_RING_SIZE];
+static struct mbuf *rx_mbufs_cache[RX_RING_SIZE];
 
 // remember where the e1000's registers live.
 static volatile uint32 *regs;
@@ -144,19 +145,22 @@ static void e1000_recv(void) {
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
 
-  uint32 rdt, nxt_rdt;
+  uint32 rdt, nxt_rdt, start_idx, end_idx;
   struct rx_desc *desc;
   struct mbuf *mbuf = 0;
-  struct mbuf *nxt_mbuf = mbufalloc(0);
+  struct mbuf *nxt_mbuf = 0;
 
   acquire(&e1000_lock);
   rdt = regs[E1000_RDT];
   nxt_rdt = (rdt + 1) % RX_RING_SIZE;
   desc = &rx_ring[nxt_rdt];
+  start_idx = end_idx = nxt_rdt;
   // printf("Recving packets: tail: %d\n", rdt);
-  if ((desc->status & E1000_RXD_STAT_DD)) {
+  while ((desc->status & E1000_RXD_STAT_DD)) {
     mbuf = rx_mbufs[nxt_rdt];
     mbuf->len = desc->length;
+    rx_mbufs_cache[nxt_rdt] = mbuf;
+    nxt_mbuf = mbufalloc(0);
     rx_mbufs[nxt_rdt] = nxt_mbuf;
     if (!rx_mbufs[nxt_rdt])
       panic("e1000");
@@ -164,11 +168,17 @@ static void e1000_recv(void) {
     desc->length = 0;
     desc->status = 0;
     regs[E1000_RDT] = nxt_rdt;
+
+    nxt_rdt = (nxt_rdt + 1) % RX_RING_SIZE;
+    end_idx = nxt_rdt;
+    desc = &rx_ring[nxt_rdt];
   }
 
   release(&e1000_lock);
-  if (mbuf)
-    net_rx(mbuf);
+  while (start_idx != end_idx) {
+    net_rx(rx_mbufs_cache[start_idx]);
+    start_idx = (start_idx + 1) % RX_RING_SIZE;
+  }
 }
 
 void e1000_intr(void) {

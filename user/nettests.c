@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
       exit(0);
     }
   }
-  printf("testing multi-process pings waiting");
+
   for (i = 0; i < 10; i++) {
     wait(&ret);
     if (ret != 0)
