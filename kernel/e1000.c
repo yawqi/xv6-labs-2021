@@ -15,6 +15,7 @@
 #include "e1000_dev.h"
 
 #include "net.h"
+
 #define TX_RING_SIZE 16
 static struct tx_desc tx_ring[TX_RING_SIZE] __attribute__((aligned(16)));
 static struct mbuf *tx_mbufs[TX_RING_SIZE];
@@ -125,12 +126,13 @@ int e1000_transmit(struct mbuf *m) {
   if (m->next) {
     printf("mbuf has next: %p %p\n", m, m->next);
   }
-  memset(desc, 0, sizeof(struct tx_desc));
+  // memset(desc, 0, sizeof(struct tx_desc));
   desc->addr = (uint64)m->head;
   desc->length = m->len;
   desc->cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  desc->status = 0;
   tx_mbufs[tdt] = m;
-  regs[E1000_TDT] = (tdt + 1) & TX_RING_SIZE;
+  regs[E1000_TDT] = (tdt + 1) % TX_RING_SIZE;
   printf("Transmitting Done\n");
   release(&e1000_lock);
   return 0;
@@ -145,21 +147,19 @@ static void e1000_recv(void) {
   //
   uint32 rdt, nxt_rdt;
   struct rx_desc *desc;
-  struct mbuf *mbuf;
+  struct mbuf *mbuf = 0;
 
   printf("Start Recving\n");
   acquire(&e1000_lock);
   rdt = regs[E1000_RDT];
   nxt_rdt = (rdt + 1) % RX_RING_SIZE;
   desc = &rx_ring[nxt_rdt];
-  mbuf = rx_mbufs[nxt_rdt];
-  printf("Recving packets: tail: %u\n", rdt);
+  printf("Recving packets: tail: %d\n", rdt);
   if ((desc->status & E1000_RXD_STAT_DD)) {
+    mbuf = rx_mbufs[nxt_rdt];
     mbuf->len = desc->length;
-    net_rx(mbuf);
-    mbuffree(mbuf);
-    mbuf = mbufalloc(0);
-    if (!mbuf)
+    rx_mbufs[nxt_rdt] = mbufalloc(0);
+    if (!rx_mbufs[nxt_rdt])
       panic("e1000");
     memset(desc, 0, sizeof(struct rx_desc));
     desc->addr = (uint64)mbuf->head;
@@ -167,7 +167,10 @@ static void e1000_recv(void) {
     regs[E1000_RDT] = nxt_rdt;
   }
 
+  printf("Recving done\n");
   release(&e1000_lock);
+  if (mbuf)
+    net_rx(mbuf);
 }
 
 void e1000_intr(void) {
