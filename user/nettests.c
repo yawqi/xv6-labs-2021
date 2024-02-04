@@ -28,7 +28,6 @@ static void ping(uint16 sport, uint16 dport, int attempts) {
   }
 
   for (int i = 0; i < attempts; i++) {
-    printf("ping send %s\n", obuf);
     if (write(fd, obuf, strlen(obuf)) < 0) {
       fprintf(2, "ping: send() failed\n");
       exit(1);
@@ -36,9 +35,7 @@ static void ping(uint16 sport, uint16 dport, int attempts) {
   }
 
   char ibuf[128];
-  printf("ping before read\n");
   int cc = read(fd, ibuf, sizeof(ibuf) - 1);
-  printf("ping after read\n");
   if (cc < 0) {
     fprintf(2, "ping: recv() failed\n");
     exit(1);
@@ -274,6 +271,7 @@ int main(int argc, char *argv[]) {
       exit(0);
     }
   }
+  printf("testing multi-process pings waiting");
   for (i = 0; i < 10; i++) {
     wait(&ret);
     if (ret != 0)

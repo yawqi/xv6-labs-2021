@@ -109,11 +109,10 @@ int e1000_transmit(struct mbuf *m) {
 
   uint32 tdt;
   struct tx_desc *desc;
-  printf("Start Transmitting\n");
   acquire(&e1000_lock);
   tdt = regs[E1000_TDT];
   desc = &tx_ring[tdt];
-  printf("Transmitting packets: tail: %d\n", tdt);
+  // printf("Transmitting packets: tail: %d\n", tdt);
   if ((desc->status & E1000_TXD_STAT_DD) == 0) {
     release(&e1000_lock);
     return -1;
@@ -122,10 +121,10 @@ int e1000_transmit(struct mbuf *m) {
   if (tx_mbufs[tdt])
     mbuffree(tx_mbufs[tdt]);
 
-  printf("Transmitting ...\n");
   if (m->next) {
     printf("mbuf has next: %p %p\n", m, m->next);
   }
+
   // memset(desc, 0, sizeof(struct tx_desc));
   desc->addr = (uint64)m->head;
   desc->length = m->len;
@@ -133,7 +132,6 @@ int e1000_transmit(struct mbuf *m) {
   desc->status = 0;
   tx_mbufs[tdt] = m;
   regs[E1000_TDT] = (tdt + 1) % TX_RING_SIZE;
-  printf("Transmitting Done\n");
   release(&e1000_lock);
   return 0;
 }
@@ -145,29 +143,29 @@ static void e1000_recv(void) {
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+
   uint32 rdt, nxt_rdt;
   struct rx_desc *desc;
   struct mbuf *mbuf = 0;
+  struct mbuf *nxt_mbuf = mbufalloc(0);
 
-  printf("Start Recving\n");
   acquire(&e1000_lock);
   rdt = regs[E1000_RDT];
   nxt_rdt = (rdt + 1) % RX_RING_SIZE;
   desc = &rx_ring[nxt_rdt];
-  printf("Recving packets: tail: %d\n", rdt);
+  // printf("Recving packets: tail: %d\n", rdt);
   if ((desc->status & E1000_RXD_STAT_DD)) {
     mbuf = rx_mbufs[nxt_rdt];
     mbuf->len = desc->length;
-    rx_mbufs[nxt_rdt] = mbufalloc(0);
+    rx_mbufs[nxt_rdt] = nxt_mbuf;
     if (!rx_mbufs[nxt_rdt])
       panic("e1000");
-    memset(desc, 0, sizeof(struct rx_desc));
-    desc->addr = (uint64)mbuf->head;
-    rx_mbufs[nxt_rdt] = mbuf;
+    desc->addr = (uint64)nxt_mbuf->head;
+    desc->length = 0;
+    desc->status = 0;
     regs[E1000_RDT] = nxt_rdt;
   }
 
-  printf("Recving done\n");
   release(&e1000_lock);
   if (mbuf)
     net_rx(mbuf);
