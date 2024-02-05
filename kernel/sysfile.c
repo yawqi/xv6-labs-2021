@@ -279,6 +279,7 @@ static struct inode *follow_symlink(struct inode *ip, int depth) {
   struct inode *nxt_ip;
   int ret;
   ret = readi(ip, 0, (uint64)path, 0, MAXPATH);
+  iunlockput(ip);
   if (ret < 0)
     return 0;
 
@@ -286,13 +287,13 @@ static struct inode *follow_symlink(struct inode *ip, int depth) {
   if (nxt_ip == 0)
     return 0;
 
+  ilock(nxt_ip);
   if (nxt_ip->type == T_SYMLINK) {
-    ilock(nxt_ip);
     ip = follow_symlink(nxt_ip, depth + 1);
-    iunlockput(nxt_ip);
     nxt_ip = ip;
+  } else {
+    iunlockput(nxt_ip);
   }
-
   return nxt_ip;
 }
 
@@ -336,7 +337,6 @@ uint64 sys_open(void) {
   if (ip->type == T_SYMLINK) {
     if ((omode & O_NOFOLLOW) == 0) {
       nxt_ip = follow_symlink(ip, 0);
-      iunlockput(ip);
       if (nxt_ip == 0) {
         end_op();
         return -1;
@@ -506,24 +506,20 @@ uint64 sys_symlink(void) {
 
   if (argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
     return -1;
-  printf("target: %s, path: %s\n", target, path);
+  // printf("target: %s, path: %s\n", target, path);
   begin_op();
 
-  printf("Creating symlink\n");
   ip = create(path, T_SYMLINK, 0, 0);
-  printf("Created symlink\n");
   if (!ip) {
     end_op();
     return -1;
   }
 
-  printf("Created symlink 1\n");
   if (writei(ip, 0, (uint64)target, 0, strlen(target)) < 0) {
     iunlockput(ip);
     end_op();
     return -1;
   }
-  printf("Created symlink 2\n");
 
   iunlockput(ip);
   end_op();
