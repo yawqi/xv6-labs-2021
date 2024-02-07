@@ -44,7 +44,7 @@ void binit(void) {
   struct buf *b;
 
   initlock(&bcache.lock, "bcache");
-
+  printf("Initing bcache\n");
   for (int bkt = 0; bkt < NBUCKETS; bkt++) {
     initlock(&bcache.bucket_locks[bkt], "bcache_bkt");
     bcache.buckets[bkt].prev = &bcache.buckets[bkt];
@@ -59,6 +59,7 @@ void binit(void) {
     bcache.buckets[0].next->prev = b;
     bcache.buckets[0].next = b;
   }
+  printf("Done initing bcache\n");
 }
 
 static uint get_hash(uint blockno) { return blockno % NBUCKETS; }
@@ -75,8 +76,8 @@ static struct buf *bget(uint dev, uint blockno) {
   for (b = bcache.buckets[bkt].next; b != &bcache.buckets[bkt]; b = b->next) {
     if (b->dev == dev && b->blockno == blockno) {
       b->refcnt++;
-      release(&bcache.bucket_locks[bkt]);
       acquiresleep(&b->lock);
+      release(&bcache.bucket_locks[bkt]);
       return b;
     }
   }
@@ -86,11 +87,9 @@ static struct buf *bget(uint dev, uint blockno) {
 
   // struct buf *victim;
   // uint min_ticks = 0xffffffff;
-
   for (int bkt_idx = 0; bkt_idx < NBUCKETS; bkt_idx++) {
-    if (bkt_idx == bkt)
-      continue;
-    acquire(&bcache.bucket_locks[bkt_idx]);
+    if (bkt_idx != bkt)
+      acquire(&bcache.bucket_locks[bkt_idx]);
     for (b = bcache.buckets[bkt_idx].next; b != &bcache.buckets[bkt_idx];
          b = b->next) {
       if (b->refcnt == 0) {
@@ -98,11 +97,23 @@ static struct buf *bget(uint dev, uint blockno) {
         b->blockno = blockno;
         b->valid = 0;
         b->refcnt = 1;
+
+        b->next->prev = b->prev;
+        b->prev->next = b->next;
+        b->next = bcache.buckets[bkt].next;
+        b->prev = &bcache.buckets[bkt];
+        bcache.buckets[bkt].next->prev = b;
+        bcache.buckets[bkt].next = b;
+
+        acquiresleep(&b->lock);
+        release(&bcache.bucket_locks[bkt]);
+        if (bkt_idx != bkt)
+          release(&bcache.bucket_locks[bkt_idx]);
+        return b;
       }
-      release(&bcache.bucket_locks[bkt_idx]);
-      acquiresleep(&b->lock);
-      return b;
     }
+    if (bkt_idx != bkt)
+      release(&bcache.bucket_locks[bkt_idx]);
   }
 
   panic("bget: no buffers");
@@ -139,7 +150,6 @@ void brelse(struct buf *b) {
   b->refcnt--;
   if (b->refcnt == 0) {
     // no one is waiting for it.
-    b->ticks = ticks;
   }
 
   release(&bcache.bucket_locks[bkt]);
